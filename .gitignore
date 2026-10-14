@@ -1,0 +1,28 @@
+# Secrets / local configuration (never commit)
+.env
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Test / tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build / runtime artifacts
+output/
+temp/
+*.wav
+*.mp3
+*.mp4
+*.srt
+*.vtt
+
+# IDE
+.idea/
+.vscode/
