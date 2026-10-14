@@ -3,6 +3,8 @@
 import argparse
 import sys
 
+from downloader import InputValidationError, import_local_file
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -22,7 +24,16 @@ def main(argv=None) -> int:
         parser.error("either --file or --url is required")
         return 1
 
-    print("Pipeline not implemented yet (roadmap step 1 onwards).")
+    if args.file:
+        try:
+            import_local_file(args.file)
+        except InputValidationError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"File accepted: {args.file}")
+        return 0
+
+    print("URL downloading not implemented yet (roadmap step 7).")
     return 0
 
 
