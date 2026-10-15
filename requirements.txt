@@ -6,3 +6,4 @@ python-dotenv>=1.2
 openai-whisper>=20250625
 torch>=2.14
 argostranslate>=1.9
+yt-dlp>=2024.1
