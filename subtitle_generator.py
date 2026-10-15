@@ -66,12 +66,20 @@ def translate_segments(
     return translated
 
 
-def _format_srt_timestamp(seconds: float) -> str:
+def _format_timestamp(seconds: float, ms_separator: str) -> str:
     total_ms = round(seconds * 1000)
     hours, rem_ms = divmod(total_ms, 3_600_000)
     minutes, rem_ms = divmod(rem_ms, 60_000)
     secs, ms = divmod(rem_ms, 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}{ms_separator}{ms:03d}"
+
+
+def _format_srt_timestamp(seconds: float) -> str:
+    return _format_timestamp(seconds, ",")
+
+
+def _format_vtt_timestamp(seconds: float) -> str:
+    return _format_timestamp(seconds, ".")
 
 
 def generate_srt(translated_segments: list[dict], output_path: str) -> Path:
@@ -83,6 +91,24 @@ def generate_srt(translated_segments: list[dict], output_path: str) -> Path:
         start_ts = _format_srt_timestamp(seg["start"])
         end_ts = _format_srt_timestamp(seg["end"])
         lines.append(str(index))
+        lines.append(f"{start_ts} --> {end_ts}")
+        lines.append(seg["text"])
+        lines.append(seg["translated_text"])
+        lines.append("")
+
+    path = Path(output_path)
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def generate_vtt(translated_segments: list[dict], output_path: str) -> Path:
+    """Write a bilingual .vtt file: each cue has the original line followed
+    by the translated line (FR-19).
+    """
+    lines = ["WEBVTT", ""]
+    for seg in translated_segments:
+        start_ts = _format_vtt_timestamp(seg["start"])
+        end_ts = _format_vtt_timestamp(seg["end"])
         lines.append(f"{start_ts} --> {end_ts}")
         lines.append(seg["text"])
         lines.append(seg["translated_text"])

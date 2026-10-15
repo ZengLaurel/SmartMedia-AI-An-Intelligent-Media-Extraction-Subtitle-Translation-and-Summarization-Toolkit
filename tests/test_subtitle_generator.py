@@ -7,6 +7,7 @@ import pytest
 from subtitle_generator import (
     TranslationError,
     generate_srt,
+    generate_vtt,
     segment_transcript,
     translate_segments,
 )
@@ -100,3 +101,21 @@ def test_bilingual_srt_output(tmp_path):
     assert "00:00:00,000 --> 00:00:02,500" in content
     assert "00:00:02,500 --> 00:00:05,000" in content
     assert content.strip().startswith("1")
+
+
+def test_vtt_output(tmp_path):
+    translated_segments = [
+        {"start": 0.0, "end": 2.5, "text": "Hello world.", "translated_text": "你好世界。"},
+        {"start": 2.5, "end": 5.0, "text": "Second line.", "translated_text": "第二行。"},
+    ]
+    output_file = tmp_path / "output.vtt"
+
+    result_path = generate_vtt(translated_segments, str(output_file))
+
+    content = result_path.read_text(encoding="utf-8")
+    assert content.startswith("WEBVTT")
+    assert "Hello world." in content
+    assert "你好世界。" in content
+    assert "00:00:00.000 --> 00:00:02.500" in content
+    assert "00:00:02.500 --> 00:00:05.000" in content
+    assert "," not in content.split("\n\n")[1]  # VTT uses '.' not ',' in timestamps
