@@ -1,4 +1,7 @@
 # SmartMedia-AI dependencies
-pytest>=8.0
-python-dotenv>=1.0
-openai-whisper>=20231117
+# Developed and tested against the "smart" conda environment (Python 3.10).
+# Use that environment for this project, not the system/base Python.
+pytest>=9.0
+python-dotenv>=1.2
+openai-whisper>=20250625
+torch>=2.14
