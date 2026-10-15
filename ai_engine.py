@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from media_processor import split_audio
+
 DEFAULT_MODEL_SIZE = "base"
 SUPPORTED_LANGUAGES = {"en", "zh"}
 
@@ -63,5 +65,46 @@ def transcribe_audio(
     return {
         "language": result.get("language", language),
         "segments": segments,
+    }
+
+
+def transcribe_long_audio(
+    audio_path: str,
+    segment_seconds: int,
+    temp_dir: str,
+    language: str | None = None,
+    model_size: str = DEFAULT_MODEL_SIZE,
+) -> dict:
+    """Transcribe audio_path, splitting it into segment_seconds-long chunks
+    first if it exceeds that duration, then reassembling the per-chunk
+    timestamped transcripts into one continuous timeline (FR-10).
+
+    Each chunk's timestamps are offset by its start time within the full
+    audio so segment boundaries do not reset the clock.
+    """
+    chunk_paths = split_audio(audio_path, segment_seconds, temp_dir)
+
+    detected_language = language
+    combined_segments = []
+
+    for index, chunk_path in enumerate(chunk_paths):
+        chunk_result = transcribe_audio(str(chunk_path), language=language, model_size=model_size)
+
+        if detected_language is None:
+            detected_language = chunk_result["language"]
+
+        offset = index * segment_seconds
+        for seg in chunk_result["segments"]:
+            combined_segments.append(
+                {
+                    "start": seg["start"] + offset,
+                    "end": seg["end"] + offset,
+                    "text": seg["text"],
+                }
+            )
+
+    return {
+        "language": detected_language,
+        "segments": combined_segments,
     }
 
