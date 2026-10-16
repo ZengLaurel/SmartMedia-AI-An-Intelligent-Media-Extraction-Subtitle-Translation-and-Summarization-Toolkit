@@ -16,6 +16,15 @@ class DownloadError(RuntimeError):
     """Raised when a URL download fails (network, missing dependency, etc.)."""
 
 
+class DownloadTimeoutError(DownloadError):
+    """Raised when a URL download exceeds the configured socket timeout
+    (FR-39: API timeout / network interruption).
+    """
+
+
+DEFAULT_SOCKET_TIMEOUT_SECONDS = 30
+
+
 def import_local_file(path: str) -> Path:
     """Validate a local media file path and return it as a Path.
 
@@ -70,13 +79,15 @@ def download_from_url(
     url: str,
     output_dir: str = ".",
     progress_hook=None,
+    socket_timeout: int = DEFAULT_SOCKET_TIMEOUT_SECONDS,
 ) -> Path:
     """Download the media at `url` using yt-dlp (IFR-03, FR-01).
 
     Displays download progress via progress_hook (defaults to printing
     percentage/speed to stdout) per FR-05. Returns the path to the
-    downloaded file. Raises InputValidationError for a malformed URL and
-    DownloadError if yt-dlp is missing or the download fails.
+    downloaded file. Raises InputValidationError for a malformed URL,
+    DownloadTimeoutError if the connection exceeds socket_timeout (FR-39),
+    and DownloadError if yt-dlp is missing or the download otherwise fails.
     """
     validated_url = validate_url(url)
 
@@ -94,6 +105,7 @@ def download_from_url(
         "progress_hooks": [hook],
         "quiet": True,
         "no_warnings": True,
+        "socket_timeout": socket_timeout,
     }
 
     try:
@@ -101,6 +113,10 @@ def download_from_url(
             info = ydl.extract_info(validated_url, download=True)
             filename = ydl.prepare_filename(info)
     except Exception as exc:
+        if "timed out" in str(exc).lower() or isinstance(exc, TimeoutError):
+            raise DownloadTimeoutError(
+                f"Download timed out after {socket_timeout}s for {url}: {exc}"
+            ) from exc
         raise DownloadError(f"Failed to download {url}: {exc}") from exc
 
     return Path(filename)
