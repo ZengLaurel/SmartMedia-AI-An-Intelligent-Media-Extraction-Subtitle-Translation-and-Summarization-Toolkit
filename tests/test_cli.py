@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import cli_main
+import pipeline
 from downloader import InputValidationError
 
 
@@ -42,14 +43,14 @@ def test_cli_format_selection():
 
 def _patch_pipeline(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        cli_main, "import_local_file", lambda path: tmp_path / "video.mp4"
+        pipeline, "import_local_file", lambda path: tmp_path / "video.mp4"
     )
     monkeypatch.setattr(
-        cli_main, "extract_audio", lambda src, dst: tmp_path / "audio.wav"
+        pipeline, "extract_audio", lambda src, dst: tmp_path / "audio.wav"
     )
-    monkeypatch.setattr(cli_main, "get_audio_duration", lambda path: 10.0)
+    monkeypatch.setattr(pipeline, "get_audio_duration", lambda path: 10.0)
     monkeypatch.setattr(
-        cli_main,
+        pipeline,
         "transcribe_audio",
         lambda path, language=None: {
             "language": "en",
@@ -57,20 +58,20 @@ def _patch_pipeline(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        cli_main,
+        pipeline,
         "translate_segments",
         lambda segments, source, target: [
             {**seg, "translated_text": "你好世界。"} for seg in segments
         ],
     )
     monkeypatch.setattr(
-        cli_main, "generate_srt", lambda segments, path: tmp_path / "subtitles.srt"
+        pipeline, "generate_srt", lambda segments, path: tmp_path / "subtitles.srt"
     )
     monkeypatch.setattr(
-        cli_main, "generate_vtt", lambda segments, path: tmp_path / "subtitles.vtt"
+        pipeline, "generate_vtt", lambda segments, path: tmp_path / "subtitles.vtt"
     )
     monkeypatch.setattr(
-        cli_main, "save_summary_output", lambda text, path: tmp_path / "summary.txt"
+        pipeline, "save_summary_output", lambda text, path: tmp_path / "summary.txt"
     )
 
 
@@ -98,7 +99,7 @@ def test_cli_error_exit_code(tmp_path, monkeypatch, capsys):
     def raise_invalid(path):
         raise InputValidationError(f"File not found: {path}")
 
-    monkeypatch.setattr(cli_main, "import_local_file", raise_invalid)
+    monkeypatch.setattr(pipeline, "import_local_file", raise_invalid)
 
     exit_code = cli_main.main(
         ["--file", "does_not_exist.mp4", "--output-dir", str(tmp_path)]
