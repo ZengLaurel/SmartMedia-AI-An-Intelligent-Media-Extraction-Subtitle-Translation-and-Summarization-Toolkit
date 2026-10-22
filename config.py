@@ -39,6 +39,7 @@ OUTPUT_DIR = _get("OUTPUT_DIR", "output")
 TEMP_DIR = _get("TEMP_DIR", "temp")
 
 MAX_AUDIO_SEGMENT_SECONDS = int(_get("MAX_AUDIO_SEGMENT_SECONDS", "1800"))
+MAX_CONCURRENT_DOWNLOADS = int(_get("MAX_CONCURRENT_DOWNLOADS", "3"))
 
 
 def require_api_key(name: str) -> str:

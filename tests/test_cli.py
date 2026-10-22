@@ -21,9 +21,20 @@ def test_cli_argument_parsing():
 
 
 def test_cli_argument_parsing_requires_file_or_url():
-    parser = cli_main.build_parser()
+    # The source group is now required=False (batch mode is a third option),
+    # so the emptiness check happens in main(), not at parse time.
     with pytest.raises(SystemExit):
-        parser.parse_args([])
+        cli_main.main([])
+
+
+def test_cli_argument_parsing_download_urls():
+    parser = cli_main.build_parser()
+    args = parser.parse_args(
+        ["--download-urls", "https://example.com/a", "https://example.com/b",
+         "--max-concurrent-downloads", "4"]
+    )
+    assert args.download_urls == ["https://example.com/a", "https://example.com/b"]
+    assert args.max_concurrent_downloads == 4
 
 
 def test_cli_argument_parsing_rejects_both_file_and_url():
@@ -115,3 +126,51 @@ def test_cli_error_exit_code(tmp_path, monkeypatch, capsys):
 def test_cli_requires_input():
     with pytest.raises(SystemExit):
         cli_main.main([])
+
+
+def test_cli_batch_download_success(tmp_path, monkeypatch, capsys):
+    from downloader import BatchDownloadResult
+
+    monkeypatch.setattr(
+        cli_main,
+        "download_multiple_from_urls",
+        lambda urls, output_dir, max_workers, on_progress=None, cancel_event=None: [
+            BatchDownloadResult(index=i, url=u, path=tmp_path / f"{i}.mp4")
+            for i, u in enumerate(urls)
+        ],
+    )
+
+    exit_code = cli_main.main(
+        ["--download-urls", "https://example.com/a", "https://example.com/b",
+         "--output-dir", str(tmp_path)]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Downloaded:" in captured.out
+    assert (tmp_path / "processing.log").exists()
+    log = (tmp_path / "processing.log").read_text(encoding="utf-8")
+    assert "stage=batch_download status=success" in log
+
+
+def test_cli_batch_download_partial_failure(tmp_path, monkeypatch, capsys):
+    from downloader import BatchDownloadResult
+
+    monkeypatch.setattr(
+        cli_main,
+        "download_multiple_from_urls",
+        lambda urls, output_dir, max_workers, on_progress=None, cancel_event=None: [
+            BatchDownloadResult(index=0, url=urls[0], path=tmp_path / "0.mp4"),
+            BatchDownloadResult(index=1, url=urls[1], error="network down"),
+        ],
+    )
+
+    exit_code = cli_main.main(
+        ["--download-urls", "https://example.com/a", "https://example.com/b",
+         "--output-dir", str(tmp_path)]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Failed:" in captured.err
+    assert (tmp_path / "processing.log").exists()

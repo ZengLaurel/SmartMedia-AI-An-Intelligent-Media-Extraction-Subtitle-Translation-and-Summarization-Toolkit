@@ -1,7 +1,11 @@
 """Media acquisition: local file import / URL download (yt-dlp)."""
 
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
+from typing import Callable
 
 SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".mp3", ".wav", ".m4a"}
 
@@ -23,6 +27,16 @@ class DownloadTimeoutError(DownloadError):
 
 
 DEFAULT_SOCKET_TIMEOUT_SECONDS = 30
+DEFAULT_MAX_CONCURRENT_DOWNLOADS = 3
+
+
+@dataclass(frozen=True)
+class BatchDownloadResult:
+    index: int
+    url: str
+    path: Path | None = None
+    error: str | None = None
+    cancelled: bool = False
 
 
 def import_local_file(path: str) -> Path:
@@ -80,6 +94,7 @@ def download_from_url(
     output_dir: str = ".",
     progress_hook=None,
     socket_timeout: int = DEFAULT_SOCKET_TIMEOUT_SECONDS,
+    filename_prefix: str | None = None,
 ) -> Path:
     """Download the media at `url` using yt-dlp (IFR-03, FR-01).
 
@@ -99,9 +114,12 @@ def download_from_url(
         ) from exc
 
     hook = progress_hook or _default_progress_hook
+    template = "%(title)s.%(ext)s"
+    if filename_prefix is not None:
+        template = f"{filename_prefix}_%(title)s.%(ext)s"
 
     options = {
-        "outtmpl": str(Path(output_dir) / "%(title)s.%(ext)s"),
+        "outtmpl": str(Path(output_dir) / template),
         "progress_hooks": [hook],
         "quiet": True,
         "no_warnings": True,
@@ -120,4 +138,74 @@ def download_from_url(
         raise DownloadError(f"Failed to download {url}: {exc}") from exc
 
     return Path(filename)
+
+
+def download_multiple_from_urls(
+    urls: list[str],
+    output_dir: str,
+    max_workers: int = DEFAULT_MAX_CONCURRENT_DOWNLOADS,
+    on_progress: Callable[[int, str, dict], None] | None = None,
+    cancel_event: Event | None = None,
+) -> list[BatchDownloadResult]:
+    """Download several URLs concurrently, retaining input-order results.
+
+    Each task receives a unique filename prefix to prevent collisions when
+    different URLs yield media with the same title. Cancellation prevents
+    not-yet-started downloads and waits for active yt-dlp calls to finish.
+    """
+    if not urls:
+        raise InputValidationError("At least one URL is required.")
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1.")
+
+    validated_urls = [validate_url(url) for url in urls]
+    results: list[BatchDownloadResult | None] = [None] * len(validated_urls)
+
+    def download_one(index: int, url: str) -> BatchDownloadResult:
+        if cancel_event is not None and cancel_event.is_set():
+            return BatchDownloadResult(index=index, url=url, cancelled=True)
+
+        last_sent = [0.0]
+
+        def hook(data: dict) -> None:
+            if on_progress is not None:
+                import time
+
+                now = time.monotonic()
+                if data.get("status") != "downloading" or now - last_sent[0] >= 0.2:
+                    last_sent[0] = now
+                    on_progress(index, url, dict(data))
+
+        try:
+            path = download_from_url(
+                url,
+                output_dir=output_dir,
+                progress_hook=hook,
+                filename_prefix=f"{index + 1:03d}",
+            )
+        except Exception as exc:
+            return BatchDownloadResult(index=index, url=url, error=str(exc))
+        return BatchDownloadResult(index=index, url=url, path=path)
+
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="media-download") as executor:
+        futures = {
+            executor.submit(download_one, index, url): (index, url)
+            for index, url in enumerate(validated_urls)
+        }
+        for future in as_completed(futures):
+            index, url = futures[future]
+            try:
+                results[index] = future.result()
+            except Exception as exc:
+                results[index] = BatchDownloadResult(index=index, url=url, error=str(exc))
+
+    if cancel_event is not None and cancel_event.is_set():
+        results = [
+            result if result is not None else BatchDownloadResult(
+                index=index, url=url, cancelled=True
+            )
+            for index, (url, result) in enumerate(zip(validated_urls, results))
+        ]
+
+    return [result for result in results if result is not None]
 

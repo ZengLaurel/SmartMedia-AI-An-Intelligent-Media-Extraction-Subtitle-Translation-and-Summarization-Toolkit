@@ -105,6 +105,7 @@ def _fake_view(tmp_path):
     app.closing = False
     app.pending_result = None
     app.output_directory = tmp_path
+    app.batch_mode = False
     app.progress = MagicMock()
     app.start_button = MagicMock()
     app.cancel_button = MagicMock()
@@ -232,3 +233,66 @@ def test_gui_cli_backend_parity(tmp_path, monkeypatch, subtitle_format):
     assert stages == cli_stages
     for filename in ("audio.wav", "transcript.txt", "subtitles." + subtitle_format, "summary.txt"):
         assert (cli_dir / filename).read_bytes() == (gui_dir / filename).read_bytes()
+
+
+def test_batch_download_worker_queues_progress_and_complete(monkeypatch):
+    from downloader import BatchDownloadResult
+
+    results = [
+        BatchDownloadResult(index=0, url="https://example.com/a", path=Path("a.mp4")),
+        BatchDownloadResult(index=1, url="https://example.com/b", error="fail"),
+    ]
+
+    def fake_download(urls, output_dir, max_workers, on_progress=None, cancel_event=None):
+        on_progress(0, urls[0], {"status": "downloading", "_percent_str": "10%"})
+        return results
+
+    monkeypatch.setattr(gui_app, "download_multiple_from_urls", fake_download)
+    worker = gui_app.BatchDownloadWorker()
+    worker.start(["https://example.com/a", "https://example.com/b"], "out", 2)
+    worker.thread.join(timeout=5)
+    assert not worker.running
+    events = []
+    while not worker.events.empty():
+        events.append(worker.events.get_nowait())
+    assert events[0] == ("progress", 0, "https://example.com/a",
+                         {"status": "downloading", "_percent_str": "10%"})
+    assert events[-1] == ("complete", results)
+
+
+def test_batch_download_worker_cancel_blocks_restart(monkeypatch):
+    import threading
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    def fake_download(urls, output_dir, max_workers, on_progress=None, cancel_event=None):
+        entered.set()
+        assert release.wait(timeout=5)
+        return []
+
+    monkeypatch.setattr(gui_app, "download_multiple_from_urls", fake_download)
+    worker = gui_app.BatchDownloadWorker()
+    worker.start(["https://example.com/a"], "out", 2)
+    try:
+        assert entered.wait(timeout=5)
+        worker.cancel()
+        assert worker.running
+        with pytest.raises(RuntimeError):
+            worker.start(["https://example.com/b"], "out", 2)
+    finally:
+        release.set()
+        worker.thread.join(timeout=5)
+    assert not worker.running
+
+
+def test_batch_download_worker_reports_error(monkeypatch):
+    def fake_download(urls, output_dir, max_workers, on_progress=None, cancel_event=None):
+        raise ValueError("max_workers must be at least 1")
+
+    monkeypatch.setattr(gui_app, "download_multiple_from_urls", fake_download)
+    worker = gui_app.BatchDownloadWorker()
+    worker.start(["https://example.com/a"], "out", 0)
+    worker.thread.join(timeout=5)
+    assert not worker.running
+    assert worker.events.get_nowait() == ("error", "max_workers must be at least 1")

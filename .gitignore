@@ -22,6 +22,9 @@ temp/
 *.mp4
 *.srt
 *.vtt
+processing.log
+transcript.txt
+summary.txt
 
 # IDE
 .idea/

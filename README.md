@@ -67,17 +67,23 @@ TEMP_DIR=temp
 python main.py --file <本地媒体文件路径>
 # 或
 python main.py --url <媒体URL> --source en --target zh --format srt --output-dir output
+# 或批量下载（只下载，不转写/字幕/摘要）
+python main.py --download-urls <URL1> <URL2> ... --max-concurrent-downloads 3 --output-dir output
 ```
 
 参数说明：
 
-- `--file` / `--url`：二选一（必填），本地媒体文件或媒体 URL
-- `--source`：源语言代码（`en`/`zh`），缺省时由 Whisper 自动检测
-- `--target`：字幕翻译目标语言，默认 `zh`
-- `--format`：字幕格式 `srt`（默认）或 `vtt`
+- `--file` / `--url` / `--download-urls`：三者互斥，选其一
+  - `--file`：本地媒体文件（完整处理：转写、字幕、摘要）
+  - `--url`：单个媒体 URL（完整处理）
+  - `--download-urls`：多个 URL，并发下载后停止（不自动转写）
+- `--max-concurrent-downloads`：批量下载的最大并发数（默认 3，可通过环境变量 `MAX_CONCURRENT_DOWNLOADS` 配置）
+- `--source`：源语言代码（`en`/`zh`），缺省时由 Whisper 自动检测；仅单项处理时有效
+- `--target`：字幕翻译目标语言，默认 `zh`；仅单项处理时有效
+- `--format`：字幕格式 `srt`（默认）或 `vtt`；仅单项处理时有效
 - `--output-dir`：所有产物的输出目录
 
-成功时打印各产物（音频、转写文本、双语字幕、摘要、处理日志）的路径并返回退出码 0；任何阶段失败时打印错误信息并返回退出码 1。当前支持的媒体扩展名：`.mp4 .mkv .mov .avi .webm .mp3 .wav .m4a`。
+成功时打印各产物（音频、转写文本、双语字幕、摘要、处理日志）的路径并返回退出码 0；任何阶段失败时打印错误信息并返回退出码 1。批量下载中单个 URL 失败不影响其他 URL，但存在失败项时整体返回退出码 1。当前支持的媒体扩展名：`.mp4 .mkv .mov .avi .webm .mp3 .wav .m4a`。
 
 ### 桌面 GUI
 
@@ -87,8 +93,10 @@ python gui_app.py
 
 图形界面（Tkinter，无需额外依赖）提供：本地文件 / URL 二选一、源与目标语言选择、SRT/VTT 格式与输出目录选择、开始 / 取消按钮、当前阶段进度提示，以及处理完成后应用内的双语字幕与摘要预览标签页和"打开输出目录"按钮。
 
+图形界面还提供**批量下载模式**：多行 URL 输入、最大并发数选择，逐项显示下载进度、完成路径或失败原因，处理结束后可打开下载目录。
+
 - GUI 与 CLI 调用同一共享流水线 `pipeline.py`，处理行为一致（NFR-03）。
-- **取消语义**：点击"取消"或处理中关闭窗口后，当前正在执行的阻塞阶段（如 Whisper 转写）会先运行结束，随后的所有阶段不再执行；已生成的文件与处理日志保留在输出目录。
+- **取消语义**：点击"取消"或处理中关闭窗口后，当前正在执行的阻塞阶段（如 Whisper 转写）会先运行结束，随后的所有阶段不再执行；批量下载会停止尚未开始的项目并等待进行中的下载收尾。已生成的文件与处理日志保留在输出目录。
 - 首次运行会加载本地 Whisper 模型，可能较慢；翻译需要已安装对应语言的 argostranslate 语言包。
 
 ### 使用 VLC 播放双语字幕
@@ -137,3 +145,4 @@ pytest tests -v
 - 阶段 1 第 2 步：FFmpeg 音频提取（16kHz 单声道 WAV）
 - 阶段 1 第 3 步：语音转写（Whisper，带时间戳，自动语言检测）
 - 第 12 步：Tkinter GUI（共享流水线、进度与取消、字幕/摘要预览）
+- 第 13 步：多线程批量下载（GUI 与 CLI，可配置最大并发数）
