@@ -239,6 +239,7 @@ class SmartMediaApp:
         ttk.Label(container, textvariable=self.status, wraplength=880).grid(
             row=4, column=0, sticky="ew", pady=(0, 8)
         )
+        self.previews = ttk.Notebook(container)
         self.previews.grid(row=5, column=0, sticky="nsew")
         self.subtitle_preview = ScrolledText(self.previews, wrap="word", state="disabled",
                                             font=("Consolas", 11))
