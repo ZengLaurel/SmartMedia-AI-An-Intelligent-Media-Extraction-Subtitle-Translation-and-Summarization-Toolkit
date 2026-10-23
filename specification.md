@@ -296,7 +296,7 @@ The software is considered to have **passed acceptance for its Core scope** when
 | FR-03 | Core | Validate URL/file input | `test_validate_url_and_file_input` | To be implemented |
 | FR-04 | Core | Configurable output directory | `test_output_directory_selection` | To be implemented |
 | FR-05 | Core | Display download progress | `test_download_progress_indicator` | To be implemented |
-| FR-06 | Extension | Multi-threaded downloading | `test_concurrent_downloads`; manual batch-download walkthrough | Implemented — pending verification |
+| FR-06 | Extension | Multi-threaded downloading | mocked concurrency tests in `tests/test_downloader_url.py`; real CLI/GUI batch-download walkthrough with concurrent downloads, per-item failure isolation, and filename-collision avoidance | Implemented |
 | FR-07 | Core | Extract audio via FFmpeg | `test_ffmpeg_audio_extraction` | To be implemented |
 | FR-08 | Core | Convert to WAV/MP3/M4A | `test_audio_format_conversion` | To be implemented |
 | FR-09 | Core | Convert to ASR-ready format | `test_audio_converted_to_asr_format` | To be implemented |
